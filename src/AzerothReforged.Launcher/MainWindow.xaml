@@ -3,6 +3,16 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Azeroth Reforged" Width="980" Height="620"
         WindowStartupLocation="CenterScreen">
+
+    <Window.Background>
+        <ImageBrush ImageSource="Assets/bg_main.jpg"
+                    Stretch="UniformToFill"
+                    AlignmentX="Center"
+                    AlignmentY="Center"/>
+    </Window.Background>
+
+</Window>
+
   <Window.Resources>
     <!-- Subtle WotLK-ish gradient background -->
     <LinearGradientBrush x:Key="BgGrad" StartPoint="0,0" EndPoint="0,1">
