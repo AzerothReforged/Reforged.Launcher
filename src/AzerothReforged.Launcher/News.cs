@@ -1,3 +1,6 @@
+// ============================================
+// File: src/AzerothReforged.Launcher/News.cs
+// ============================================
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,9 +17,7 @@ namespace AzerothReforged.Launcher
     {
         public static async Task<List<NewsItem>> FetchNewsAsync(Uri url, CancellationToken ct)
         {
-            // FeedReader handles RSS/Atom. No cancellation overload, so ignore ct here.
             var feed = await FeedReader.ReadAsync(url.ToString());
-
             var items = feed.Items.Select(i => new NewsItem(
                 title: i.Title ?? "(untitled)",
                 summary: Truncate(StripHtml(i.Description ?? i.Content ?? string.Empty), 300),
@@ -32,15 +33,9 @@ namespace AzerothReforged.Launcher
 
         private static DateTime CoerceDate(FeedItem i)
         {
-            if (i.PublishingDate.HasValue)
-                return i.PublishingDate.Value;
-
-            // Fallback: try string parse if provided by this feed
+            if (i.PublishingDate.HasValue) return i.PublishingDate.Value;
             if (!string.IsNullOrWhiteSpace(i.PublishingDateString) &&
-                DateTime.TryParse(i.PublishingDateString, out var dt))
-                return dt;
-
-            // Last resort: now
+                DateTime.TryParse(i.PublishingDateString, out var dt)) return dt;
             return DateTime.UtcNow;
         }
 
