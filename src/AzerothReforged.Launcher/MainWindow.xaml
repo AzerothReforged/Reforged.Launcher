@@ -11,8 +11,6 @@
                     AlignmentY="Center"/>
     </Window.Background>
 
-</Window>
-
   <Window.Resources>
     <!-- Subtle WotLK-ish gradient background -->
     <LinearGradientBrush x:Key="BgGrad" StartPoint="0,0" EndPoint="0,1">
