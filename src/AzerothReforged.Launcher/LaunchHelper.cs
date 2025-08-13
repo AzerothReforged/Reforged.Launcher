@@ -1,3 +1,6 @@
+// ============================================
+// File: src/AzerothReforged.Launcher/LaunchHelper.cs
+// ============================================
 using System.Diagnostics;
 using System.IO;
 
