@@ -1,6 +1,3 @@
-<!-- ============================================
-File: src/AzerothReforged.Launcher/AzerothReforged.Launcher.csproj
-============================================= -->
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -8,12 +5,21 @@ File: src/AzerothReforged.Launcher/AzerothReforged.Launcher.csproj
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <!-- custom icon -->
+    <ApplicationIcon>Assets\launcher.ico</ApplicationIcon>
   </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="CodeHollow.FeedReader" Version="1.2.2" />
   </ItemGroup>
+
+  <!-- resources -->
   <ItemGroup>
     <Resource Include="Assets\bg_main.png" />
+    <None Include="launcher.cfg">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </None>
+    <Content Include="Assets\launcher.ico" />
   </ItemGroup>
 </Project>
-
