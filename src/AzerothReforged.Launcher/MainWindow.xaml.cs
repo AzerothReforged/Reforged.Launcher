@@ -14,7 +14,7 @@ namespace AzerothReforged.Launcher
     {
         // ====== EDIT THESE IF NEEDED ======
         private const string InstallDir = @"C:\Games\Azeroth Reforged";
-        private const string ManifestUrl = "https://cdn.azerothreforged.xyz/manifest/latest.json";
+        private const string ManifestUrl = "https://cdn.azerothreforged.xyz/latest.json";
         private const string NewsUrl = "https://www.azerothreforged.xyz/feed/";
         private const string RealmlistHost = "login.azerothreforged.xyz"; // change if different
         private const string ConfigExeRelative = @"patchmenu.exe";   // "" to disable Options button
