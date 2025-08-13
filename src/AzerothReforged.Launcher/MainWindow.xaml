@@ -1,0 +1,98 @@
+<Window x:Class="AzerothReforged.Launcher.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Azeroth Reforged" Width="980" Height="620"
+        WindowStartupLocation="CenterScreen">
+  <Window.Resources>
+    <!-- Subtle WotLK-ish gradient background -->
+    <LinearGradientBrush x:Key="BgGrad" StartPoint="0,0" EndPoint="0,1">
+      <GradientStop Color="#0F0E1A" Offset="0"/>
+      <GradientStop Color="#131B24" Offset="1"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="PanelBg" Color="#66000000"/>
+    <SolidColorBrush x:Key="PanelBorder" Color="#5533A0E0"/>
+
+    <Style x:Key="PlayButtonStyle" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="18"/>
+      <Setter Property="Padding" Value="10,4"/>
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#FFF1C55A" Offset="0"/>
+            <GradientStop Color="#FFB67C14" Offset="1"/>
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+      <Setter Property="BorderBrush" Value="#FF5B3B06"/>
+      <Setter Property="BorderThickness" Value="2"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Effect">
+        <Setter.Value>
+          <DropShadowEffect Color="Black" Opacity="0.6" ShadowDepth="2" BlurRadius="8"/>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="Background">
+            <Setter.Value>
+              <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#FFFFD978" Offset="0"/>
+                <GradientStop Color="#FFD08A1B" Offset="1"/>
+              </LinearGradientBrush>
+            </Setter.Value>
+          </Setter>
+        </Trigger>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter Property="Opacity" Value="0.6"/>
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="Background" Value="#2B000000"/>
+      <Setter Property="BorderBrush" Value="#55FFFFFF"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="8,4"/>
+    </Style>
+  </Window.Resources>
+
+  <Grid Background="{StaticResource BgGrad}" Margin="12">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="2*"/>
+      <ColumnDefinition Width="*"/>
+    </Grid.ColumnDefinitions>
+
+    <!-- Left: status -->
+    <Border Grid.Column="0" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" Padding="12" Margin="0,0,12,0">
+      <DockPanel LastChildFill="True">
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+          <TextBlock Text="Azeroth Reforged" FontSize="26" FontWeight="Bold" Foreground="White"/>
+          <TextBlock x:Name="StatusText" Text="Ready" Margin="0,4,0,8" Foreground="#FFD0E8FF"/>
+          <ProgressBar x:Name="MainProgress" Height="16" Minimum="0" Maximum="100"/>
+        </StackPanel>
+
+        <ListBox x:Name="LogList" Margin="0,8,0,8" Foreground="#FFEEEEEE" Background="#22000000"/>
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,8,0,0">
+          <Button x:Name="BtnUpdate" Content="Update / Repair" Width="150" Margin="0,0,8,0" Click="BtnUpdate_Click" Style="{StaticResource SecondaryButton}"/>
+          <Button x:Name="BtnConfig" Content="Options" Width="100" Margin="0,0,8,0" Click="BtnConfig_Click" Style="{StaticResource SecondaryButton}"/>
+          <Button x:Name="BtnPlay" Content="PLAY" Width="140" Click="BtnPlay_Click" Style="{StaticResource PlayButtonStyle}"/>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- Right: news -->
+    <Border Grid.Column="1" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" Padding="12">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="News" FontWeight="Bold" FontSize="18" Foreground="White" Margin="0,0,0,8"/>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel x:Name="NewsPanel"/>
+        </ScrollViewer>
+        <Button DockPanel.Dock="Bottom" Content="Refresh" Width="100" HorizontalAlignment="Right" Margin="0,8,0,0" Click="RefreshNews_Click" Style="{StaticResource SecondaryButton}"/>
+      </DockPanel>
+    </Border>
+  </Grid>
+</Window>
