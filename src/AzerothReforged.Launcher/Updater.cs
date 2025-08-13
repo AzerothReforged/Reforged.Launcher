@@ -1,6 +1,3 @@
-// ============================================
-// File: src/AzerothReforged.Launcher/Updater.cs
-// ============================================
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -16,6 +13,11 @@ namespace AzerothReforged.Launcher
 {
     public sealed record Manifest(string version, string minLauncherVersion, string clientBuild, string baseUrl, List<ManifestFile> files);
     public sealed record ManifestFile(string path, long size, string sha256, string? torrent = null);
+
+    public sealed record UpdatePlan(int ToDownloadCount, List<ManifestFile> ToDownload)
+    {
+        public bool NeedsAny => ToDownloadCount > 0;
+    }
 
     public class Updater
     {
@@ -37,6 +39,18 @@ namespace AzerothReforged.Launcher
             return m ?? throw new InvalidOperationException("Invalid manifest JSON");
         }
 
+        public async Task<UpdatePlan> ComputeUpdatePlanAsync(Manifest manifest, CancellationToken ct)
+        {
+            var need = new List<ManifestFile>();
+            foreach (var f in manifest.files)
+            {
+                string full = Path.Combine(_installDir, f.path);
+                if (!File.Exists(full) || !await HashMatchesAsync(full, f.sha256, ct))
+                    need.Add(f);
+            }
+            return new UpdatePlan(need.Count, need);
+        }
+
         public async IAsyncEnumerable<(ManifestFile file, string status)> UpdateAsync(Manifest manifest, [EnumeratorCancellation] CancellationToken ct)
         {
             foreach (var f in manifest.files)
@@ -44,13 +58,7 @@ namespace AzerothReforged.Launcher
                 string full = Path.Combine(_installDir, f.path);
                 Directory.CreateDirectory(Path.GetDirectoryName(full)!);
 
-                bool need = true;
-                if (File.Exists(full))
-                {
-                    var localHash = await HashFileAsync(full, ct);
-                    need = !localHash.Equals(f.sha256, StringComparison.OrdinalIgnoreCase);
-                }
-
+                bool need = !File.Exists(full) || !await HashMatchesAsync(full, f.sha256, ct);
                 if (!need) { yield return (f, "ok"); continue; }
 
                 var url = new Uri(new Uri(manifest.baseUrl), f.path.Replace('\\', '/'));
@@ -80,7 +88,13 @@ namespace AzerothReforged.Launcher
             }
         }
 
-        static async Task<string> HashFileAsync(string path, CancellationToken ct)
+        private static async Task<bool> HashMatchesAsync(string path, string expectedSha, CancellationToken ct)
+        {
+            var h = await HashFileAsync(path, ct);
+            return h.Equals(expectedSha, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static async Task<string> HashFileAsync(string path, CancellationToken ct)
         {
             await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, true);
             using var sha = SHA256.Create();
