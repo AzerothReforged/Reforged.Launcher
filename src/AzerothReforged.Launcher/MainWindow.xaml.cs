@@ -1,3 +1,6 @@
+// ============================================
+// File: src/AzerothReforged.Launcher/MainWindow.xaml.cs
+// ============================================
 using System;
 using System.IO;
 using System.Linq;
@@ -5,20 +8,21 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Documents;
 using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Media;
 
 namespace AzerothReforged.Launcher
 {
     public partial class MainWindow : Window
     {
-        // ====== EDIT THESE IF NEEDED ======
+        // ===== COMPILED-IN CONFIG =====
         private const string InstallDir = @"C:\Games\Azeroth Reforged";
-        private const string ManifestUrl = "https://cdn.azerothreforged.xyz/latest.json";
-        private const string NewsUrl = "https://www.azerothreforged.xyz/feed/";
-        private const string RealmlistHost = "login.azerothreforged.xyz"; // change if different
-        private const string ConfigExeRelative = @"patchmenu.exe";   // "" to disable Options button
-        // ===================================
+        private const string ManifestUrl = "https://cdn.azerothreforged.xyz/manifest/latest.json";
+        private const string NewsUrl = "https://azerothreforged.xyz/rss";
+        private const string RealmlistHost = "login.azerothreforged.xyz";
+        private const string ConfigExeRelative = @"Tools\ConfigApp.exe"; // "" to disable
+        // ==============================
 
         private readonly Updater _updater;
 
@@ -53,7 +57,7 @@ namespace AzerothReforged.Launcher
 
                 EnsureRealmlist(InstallDir, RealmlistHost);
                 Log("Realmlist ensured.");
-                StatusText.Text = $"Update complete.";
+                StatusText.Text = "Update complete.";
             }
             catch (Exception ex)
             {
@@ -88,7 +92,7 @@ namespace AzerothReforged.Launcher
 
                 foreach (var n in items.Take(12))
                 {
-                    var title = new TextBlock { Foreground = System.Windows.Media.Brushes.White, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 2) };
+                    var title = new TextBlock { Foreground = Brushes.White, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 2) };
                     if (!string.IsNullOrWhiteSpace(n.url))
                     {
                         var link = new Hyperlink(new Run(n.title)) { NavigateUri = new Uri(n.url) };
@@ -97,8 +101,8 @@ namespace AzerothReforged.Launcher
                     }
                     else title.Text = n.title;
 
-                    var meta = new TextBlock { Text = $"{n.published:yyyy-MM-dd}", Foreground = System.Windows.Media.Brushes.LightGray, Margin = new Thickness(0, 0, 0, 2) };
-                    var sum = new TextBlock { Text = n.summary, TextWrapping = TextWrapping.Wrap, Foreground = System.Windows.Media.Brushes.Gainsboro, Margin = new Thickness(0, 0, 0, 12) };
+                    var meta = new TextBlock { Text = $"{n.published:yyyy-MM-dd}", Foreground = Brushes.LightGray, Margin = new Thickness(0, 0, 0, 2) };
+                    var sum = new TextBlock { Text = n.summary, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Gainsboro, Margin = new Thickness(0, 0, 0, 12) };
 
                     NewsPanel.Children.Add(title);
                     NewsPanel.Children.Add(meta);
@@ -108,8 +112,8 @@ namespace AzerothReforged.Launcher
             catch (Exception ex)
             {
                 NewsPanel.Children.Clear();
-                NewsPanel.Children.Add(new TextBlock { Text = "Failed to load news.", Foreground = System.Windows.Media.Brushes.OrangeRed });
-                NewsPanel.Children.Add(new TextBlock { Text = ex.Message, Foreground = System.Windows.Media.Brushes.Gray, TextWrapping = TextWrapping.Wrap });
+                NewsPanel.Children.Add(new TextBlock { Text = "Failed to load news.", Foreground = Brushes.OrangeRed });
+                NewsPanel.Children.Add(new TextBlock { Text = ex.Message, Foreground = Brushes.Gray, TextWrapping = TextWrapping.Wrap });
             }
         }
 
@@ -135,7 +139,8 @@ namespace AzerothReforged.Launcher
             {
                 var data = Path.Combine(installDir, "Data");
                 Directory.CreateDirectory(data);
-                var locale = Directory.GetDirectories(data).Select(Path.GetFileName).FirstOrDefault(d => d != null && (d.Length == 4 || d.Length == 5)) ?? "enUS";
+                var locale = Directory.GetDirectories(data).Select(Path.GetFileName)
+                              .FirstOrDefault(d => d != null && (d.Length == 4 || d.Length == 5)) ?? "enUS";
                 var path = Path.Combine(data, locale, "realmlist.wtf");
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 File.WriteAllText(path, $"set realmlist {host}\r\n", Encoding.ASCII);
