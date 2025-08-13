@@ -15,9 +15,5 @@ File: src/AzerothReforged.Launcher/AzerothReforged.Launcher.csproj
   <ItemGroup>
     <Resource Include="Assets\bg_main.png" />
   </ItemGroup>
-  <Target Name="KillRunningLauncher" BeforeTargets="Build">
-    <Exec Command="taskkill /IM &quot;AzerothReforged.Launcher.exe&quot; /F /T &amp; exit /b 0" IgnoreExitCode="true" />
-    <Exec Command="taskkill /IM &quot;apphost.exe&quot; /F /T &amp; exit /b 0" IgnoreExitCode="true" />
-  </Target>
 </Project>
 
