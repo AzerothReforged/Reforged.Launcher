@@ -1,3 +1,6 @@
+// ============================================
+// File: src/AzerothReforged.Launcher/Updater.cs
+// ============================================
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -17,9 +20,13 @@ namespace AzerothReforged.Launcher
     public class Updater
     {
         private readonly string _installDir;
-        private readonly HttpClient _http = new(new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All });
+        private readonly HttpClient _http;
 
-        public Updater(string installDir) => _installDir = installDir;
+        public Updater(string installDir)
+        {
+            _installDir = installDir;
+            _http = new HttpClient(new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All });
+        }
 
         public async Task<Manifest> FetchManifestAsync(Uri manifestUrl, CancellationToken ct)
         {
@@ -44,13 +51,8 @@ namespace AzerothReforged.Launcher
                     need = !localHash.Equals(f.sha256, StringComparison.OrdinalIgnoreCase);
                 }
 
-                if (!need)
-                {
-                    yield return (f, "ok");
-                    continue;
-                }
+                if (!need) { yield return (f, "ok"); continue; }
 
-                // HTTP download (torrent hook can be added later if f.torrent != null)
                 var url = new Uri(new Uri(manifest.baseUrl), f.path.Replace('\\', '/'));
                 string tmp = full + ".part";
 
