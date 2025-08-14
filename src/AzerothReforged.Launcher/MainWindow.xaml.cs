@@ -8,6 +8,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Navigation; // for ExceptionRoutedEventArgs
 
 namespace AzerothReforged.Launcher
 {
@@ -38,13 +40,13 @@ namespace AzerothReforged.Launcher
             _ = LoadNewsAsync();
         }
 
+        // Fallback for logo image
         private void LogoImage_ImageFailed(object sender, ExceptionRoutedEventArgs e)
         {
             LogoImage.Visibility = Visibility.Collapsed;
             LogoFallback.Visibility = Visibility.Visible;
         }
 
-        // Read launcher.cfg next to EXE. Format: InstallDir=...
         private void LoadOrCreateCfg()
         {
             string cfgPath = Path.Combine(AppContext.BaseDirectory, "launcher.cfg");
@@ -68,11 +70,7 @@ namespace AzerothReforged.Launcher
             }
             else
             {
-                try
-                {
-                    File.WriteAllText(cfgPath, $"InstallDir={_installDir}\r\n");
-                }
-                catch { /* ignore */ }
+                try { File.WriteAllText(cfgPath, $"InstallDir={_installDir}\r\n"); } catch { }
             }
         }
 
