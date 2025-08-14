@@ -17,18 +17,19 @@ namespace AzerothReforged.Launcher
         private const string ManifestUrl   = "https://cdn.azerothreforged.xyz/latest.json";
         private const string NewsUrl       = "https://www.azerothreforged.xyz/feed/";
         private const string RealmlistHost = "login.azerothreforged.xyz";
-        private const string ConfigExeName = "patchmenu.exe"; // looked up under InstallDir
+        private const string ConfigExeName = "patchmenu.exe"; // resides under InstallDir
         // =================================
 
         private enum PrimaryMode { Install, Update, Play }
         private PrimaryMode _mode = PrimaryMode.Install;
-        private string _installDir = @"C:\Games\Azeroth Reforged"; // default, can be overridden by launcher.cfg
+
+        private string _installDir = @"C:\Games\Azeroth Reforged"; // default (overridden by launcher.cfg)
         private readonly Updater _updater;
 
         public MainWindow()
         {
             InitializeComponent();
-            LoadOrCreateCfg();   // sets _installDir
+            LoadOrCreateCfg(); // sets _installDir
             _updater = new Updater(_installDir);
 
             Directory.CreateDirectory(_installDir);
@@ -37,7 +38,7 @@ namespace AzerothReforged.Launcher
             _ = LoadNewsAsync();
         }
 
-        // Read launcher.cfg next to the EXE (simple "InstallDir=...")
+        // Read launcher.cfg next to EXE. Format: InstallDir=...
         private void LoadOrCreateCfg()
         {
             string cfgPath = Path.Combine(AppContext.BaseDirectory, "launcher.cfg");
@@ -52,11 +53,12 @@ namespace AzerothReforged.Launcher
                         if (parts.Length == 2)
                         {
                             var dir = parts[1].Trim().Trim('"');
-                            if (!string.IsNullOrWhiteSpace(dir)) _installDir = dir;
+                            if (!string.IsNullOrWhiteSpace(dir))
+                                _installDir = dir;
                         }
                     }
                 }
-                catch { /* ignore, use default */ }
+                catch { /* ignore and keep default */ }
             }
             else
             {
@@ -73,23 +75,14 @@ namespace AzerothReforged.Launcher
             try
             {
                 StatusText.Text = "Checking local files...";
-                // Fast path: if Wow.exe missing => INSTALL
                 bool hasWow = File.Exists(Path.Combine(_installDir, "Wow.exe"));
 
-                // Try to fetch manifest and compute update plan (also covers fresh install)
                 var manifest = await _updater.FetchManifestAsync(new Uri(ManifestUrl), CancellationToken.None);
                 var plan = await _updater.ComputeUpdatePlanAsync(manifest, CancellationToken.None);
 
-                if (!hasWow || plan.NeedsAny)
-                    SetMode(PrimaryMode.Update);   // INSTALL and UPDATE both trigger the same updater; we'll label correctly below
-                else
-                    SetMode(PrimaryMode.Play);
+                if (!hasWow) SetMode(PrimaryMode.Install);
+                else SetMode(plan.NeedsAny ? PrimaryMode.Update : PrimaryMode.Play);
 
-                // Label adjustment: if no client assets at all → INSTALL label instead of UPDATE
-                if (!hasWow)
-                    SetMode(PrimaryMode.Install);
-
-                // Prettify file count in status
                 StatusText.Text = plan.NeedsAny
                     ? $"Update available ({plan.ToDownloadCount}/{manifest.files.Count} files)"
                     : "Up to date.";
@@ -97,7 +90,6 @@ namespace AzerothReforged.Launcher
             catch (Exception ex)
             {
                 Log("Failed to check manifest: " + ex.Message);
-                // Fallback: if we have Wow.exe, allow Play; otherwise Install.
                 if (File.Exists(Path.Combine(_installDir, "Wow.exe")))
                     SetMode(PrimaryMode.Play);
                 else
@@ -137,6 +129,7 @@ namespace AzerothReforged.Launcher
             try
             {
                 var manifest = await _updater.FetchManifestAsync(new Uri(ManifestUrl), CancellationToken.None);
+
                 int total = manifest.files.Count;
                 int done  = 0;
                 MainProgress.Value = 0;
@@ -152,10 +145,8 @@ namespace AzerothReforged.Launcher
                 EnsureRealmlist(_installDir, RealmlistHost);
                 Log("Realmlist ensured.");
 
-                // Re-evaluate state
                 var plan = await _updater.ComputeUpdatePlanAsync(manifest, CancellationToken.None);
-                if (plan.NeedsAny) SetMode(PrimaryMode.Update);
-                else SetMode(PrimaryMode.Play);
+                SetMode(plan.NeedsAny ? PrimaryMode.Update : PrimaryMode.Play);
 
                 StatusText.Text = plan.NeedsAny ? "Update pending." : "Update complete.";
             }
@@ -171,21 +162,50 @@ namespace AzerothReforged.Launcher
         }
 
         private void BtnDonate_Click(object sender, RoutedEventArgs e)
-            => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = "https://www.azerothreforged.xyz/shop/",
                 UseShellExecute = true
             });
+        }
 
         private void BtnConfig_Click(object sender, RoutedEventArgs e)
         {
-            var path = Path.Combine(_installDir, ConfigExeName);
-            LaunchHelper.LaunchConfig(path);
+            try
+            {
+                var exe = Path.Combine(_installDir, ConfigExeName);
+                if (!File.Exists(exe))
+                {
+                    Log($"Options app not found: {exe}");
+                    MessageBox.Show($"Options app not found:\n{exe}", "Options", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = exe,
+                    UseShellExecute = true,
+                    WorkingDirectory = _installDir
+                };
+                System.Diagnostics.Process.Start(psi);
+                Log("Opened options.");
+            }
+            catch (Exception ex)
+            {
+                Log("Failed to open options: " + ex.Message);
+            }
         }
 
         private void LaunchGame()
         {
             var wow = Path.Combine(_installDir, "Wow.exe");
+            if (!File.Exists(wow))
+            {
+                Log("Wow.exe not found in install directory.");
+                MessageBox.Show("Wow.exe not found in the install directory.", "Play", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
             LaunchHelper.LaunchGame(wow);
         }
 
@@ -245,8 +265,9 @@ namespace AzerothReforged.Launcher
             {
                 var data = Path.Combine(installDir, "Data");
                 Directory.CreateDirectory(data);
-                var locale = Directory.GetDirectories(data).Select(Path.GetFileName)
-                              .FirstOrDefault(d => d != null && (d.Length == 4 || d.Length == 5)) ?? "enUS";
+                var locale = Directory.GetDirectories(data)
+                                      .Select(Path.GetFileName)
+                                      .FirstOrDefault(d => d != null && (d.Length == 4 || d.Length == 5)) ?? "enUS";
                 var path = Path.Combine(data, locale, "realmlist.wtf");
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 File.WriteAllText(path, $"set realmlist {host}\r\n", Encoding.ASCII);
