@@ -69,27 +69,25 @@
       <ColumnDefinition Width="*"/>
     </Grid.ColumnDefinitions>
 
-    <!-- LEFT -->
+    <!-- LEFT: one dark panel for everything -->
     <Border Grid.Column="0" Background="{StaticResource PanelBg}"
             BorderBrush="{StaticResource PanelBorder}" BorderThickness="1"
             Padding="12" Margin="0,0,12,0">
       <Grid>
         <Grid.RowDefinitions>
-          <RowDefinition Height="Auto"/>  <!-- Logo strip -->
+          <RowDefinition Height="Auto"/>  <!-- Logo -->
           <RowDefinition Height="*"/>     <!-- Log -->
           <RowDefinition Height="Auto"/>  <!-- Status text -->
           <RowDefinition Height="Auto"/>  <!-- Progress bar -->
           <RowDefinition Height="Auto"/>  <!-- Buttons -->
         </Grid.RowDefinitions>
 
-        <!-- Top logo on dark strip (no fallback) -->
-        <Border Grid.Row="0" Background="#66000000" Padding="6" CornerRadius="4" Margin="0,0,0,8">
-          <DockPanel LastChildFill="False">
-            <Image Source="pack://application:,,,/AzerothReforged.Launcher;component/Assets/logo.png"
-                   Height="64" Stretch="Uniform"
-                   VerticalAlignment="Center"/>
-          </DockPanel>
-        </Border>
+        <!-- Logo at top (no separate strip), ~50% larger -->
+        <Image Grid.Row="0"
+               Source="pack://application:,,,/AzerothReforged.Launcher;component/Assets/logo.png"
+               Height="96" Stretch="Uniform"
+               VerticalAlignment="Top"
+               Margin="0,0,0,8"/>
 
         <!-- Log in middle -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
