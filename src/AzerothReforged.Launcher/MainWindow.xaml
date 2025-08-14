@@ -56,7 +56,7 @@
     </Style>
   </Window.Resources>
 
-  <!-- Background image (pack URI) -->
+  <!-- Background image -->
   <Window.Background>
     <ImageBrush ImageSource="pack://application:,,,/Assets/bg_main.png"
                 Stretch="UniformToFill" AlignmentX="Center" AlignmentY="Center"/>
@@ -69,41 +69,44 @@
       <ColumnDefinition Width="*"/>
     </Grid.ColumnDefinitions>
 
-    <!-- LEFT: Title + status (top), log (middle), progress (bottom), buttons (very bottom) -->
+    <!-- LEFT -->
     <Border Grid.Column="0" Background="{StaticResource PanelBg}"
             BorderBrush="{StaticResource PanelBorder}" BorderThickness="1"
             Padding="12" Margin="0,0,12,0">
       <Grid>
         <Grid.RowDefinitions>
-          <RowDefinition Height="Auto"/>  <!-- Title + status text -->
+          <RowDefinition Height="Auto"/>  <!-- Title -->
           <RowDefinition Height="*"/>     <!-- Log -->
+          <RowDefinition Height="Auto"/>  <!-- Status text -->
           <RowDefinition Height="Auto"/>  <!-- Progress bar -->
           <RowDefinition Height="Auto"/>  <!-- Buttons -->
         </Grid.RowDefinitions>
 
-        <!-- Title + status (stay at top) -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,8">
-          <TextBlock Text="Azeroth Reforged"
-                     FontSize="26" FontWeight="Bold" Foreground="White"/>
-          <TextBlock x:Name="StatusText"
-                     Text="Checking files..."
-                     Margin="0,4,0,0" Foreground="#FFD0E8FF"/>
-        </StackPanel>
+        <!-- Title at top -->
+        <TextBlock Text="Azeroth Reforged"
+                   FontSize="26" FontWeight="Bold" Foreground="White"
+                   Margin="0,0,0,8" Grid.Row="0"/>
 
-        <!-- Log (center) -->
+        <!-- Log in middle -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
           <ListBox x:Name="LogList"
                    Foreground="#FFEEEEEE" Background="#22000000"
                    BorderThickness="0"/>
         </ScrollViewer>
 
-        <!-- Progress bar (moved to bottom, above buttons) -->
+        <!-- Status text above progress bar -->
+        <TextBlock x:Name="StatusText"
+                   Text="Checking files..."
+                   Foreground="#FFD0E8FF" Margin="0,6,0,0"
+                   Grid.Row="2"/>
+
+        <!-- Progress bar -->
         <ProgressBar x:Name="MainProgress"
-                     Grid.Row="2" Height="16" Margin="0,8,0,8"
+                     Grid.Row="3" Height="16" Margin="0,4,0,8"
                      Minimum="0" Maximum="100"/>
 
-        <!-- Bottom buttons -->
-        <Grid Grid.Row="3">
+        <!-- Buttons -->
+        <Grid Grid.Row="4">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="*"/>
@@ -115,12 +118,12 @@
                   Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"
                   Click="BtnDonate_Click"/>
 
-          <!-- Options (patchmenu.exe under InstallDir) -->
+          <!-- Options -->
           <Button x:Name="BtnConfig" Grid.Column="1" Content="Options"
                   Style="{StaticResource SecondaryButton}" Margin="8,0,8,0"
                   Click="BtnConfig_Click"/>
 
-          <!-- Primary: INSTALL / UPDATE / PLAY -->
+          <!-- Play / Update / Install -->
           <Button x:Name="BtnPrimary" Grid.Column="2" Content="PLAY"
                   Style="{StaticResource PlayButtonStyle}" Margin="8,0,0,0"
                   Click="BtnPrimary_Click"/>
@@ -128,7 +131,7 @@
       </Grid>
     </Border>
 
-    <!-- RIGHT: News panel -->
+    <!-- RIGHT: News -->
     <Border Grid.Column="1" Background="{StaticResource PanelBg}"
             BorderBrush="{StaticResource PanelBorder}" BorderThickness="1"
             Padding="12">
