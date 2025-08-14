@@ -38,6 +38,12 @@ namespace AzerothReforged.Launcher
             _ = LoadNewsAsync();
         }
 
+        private void LogoImage_ImageFailed(object sender, ExceptionRoutedEventArgs e)
+        {
+            LogoImage.Visibility = Visibility.Collapsed;
+            LogoFallback.Visibility = Visibility.Visible;
+        }
+
         // Read launcher.cfg next to EXE. Format: InstallDir=...
         private void LoadOrCreateCfg()
         {
