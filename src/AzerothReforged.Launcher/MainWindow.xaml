@@ -4,7 +4,6 @@
         Title="Azeroth Reforged" Width="980" Height="620"
         WindowStartupLocation="CenterScreen">
 
-  <!-- Styles -->
   <Window.Resources>
     <SolidColorBrush x:Key="PanelBg" Color="#66000000"/>
     <SolidColorBrush x:Key="PanelBorder" Color="#5533A0E0"/>
@@ -62,14 +61,13 @@
                 Stretch="UniformToFill" AlignmentX="Center" AlignmentY="Center"/>
   </Window.Background>
 
-  <!-- Main layout -->
   <Grid Margin="12">
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="2*"/>
       <ColumnDefinition Width="*"/>
     </Grid.ColumnDefinitions>
 
-    <!-- LEFT: one dark panel for everything -->
+    <!-- LEFT panel (single dark container for everything) -->
     <Border Grid.Column="0" Background="{StaticResource PanelBg}"
             BorderBrush="{StaticResource PanelBorder}" BorderThickness="1"
             Padding="12" Margin="0,0,12,0">
@@ -82,32 +80,34 @@
           <RowDefinition Height="Auto"/>  <!-- Buttons -->
         </Grid.RowDefinitions>
 
-        <!-- Logo at top (no separate strip), ~50% larger -->
+        <!-- LOGO: in the same dark container, left-aligned, ~50% larger -->
         <Image Grid.Row="0"
                Source="pack://application:,,,/AzerothReforged.Launcher;component/Assets/logo.png"
                Height="96" Stretch="Uniform"
+               HorizontalAlignment="Left"
                VerticalAlignment="Top"
                Margin="0,0,0,8"/>
 
-        <!-- Log in middle -->
+        <!-- LOG: transparent background so no inner darker rectangle -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
           <ListBox x:Name="LogList"
-                   Foreground="#FFEEEEEE" Background="#22000000"
+                   Foreground="#FFEEEEEE"
+                   Background="Transparent"
                    BorderThickness="0"/>
         </ScrollViewer>
 
-        <!-- Status text above progress bar -->
+        <!-- STATUS text above progress bar -->
         <TextBlock x:Name="StatusText"
                    Text="Checking files..."
                    Foreground="#FFD0E8FF" Margin="0,6,0,0"
                    Grid.Row="2"/>
 
-        <!-- Progress bar -->
+        <!-- PROGRESS bar -->
         <ProgressBar x:Name="MainProgress"
                      Grid.Row="3" Height="16" Margin="0,4,0,8"
                      Minimum="0" Maximum="100"/>
 
-        <!-- Buttons -->
+        <!-- BUTTONS (bottom row) -->
         <Grid Grid.Row="4">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
