@@ -75,32 +75,28 @@
             Padding="12" Margin="0,0,12,0">
       <Grid>
         <Grid.RowDefinitions>
-          <RowDefinition Height="Auto"/>  <!-- Title (logo on dark strip) -->
+          <RowDefinition Height="Auto"/>  <!-- Logo strip -->
           <RowDefinition Height="*"/>     <!-- Log -->
           <RowDefinition Height="Auto"/>  <!-- Status text -->
           <RowDefinition Height="Auto"/>  <!-- Progress bar -->
           <RowDefinition Height="Auto"/>  <!-- Buttons -->
         </Grid.RowDefinitions>
 
-        <!-- Title at top with its own darkened background -->
+        <!-- Top logo with fallback -->
         <Border Grid.Row="0" Background="#66000000" Padding="6" CornerRadius="4" Margin="0,0,0,8">
-            <DockPanel LastChildFill="False">
-                <Image x:Name="LogoImage"
-                       Source="pack://application:,,,/Assets/logo.png"
-                       Height="64"
-                       Stretch="Uniform"
+          <DockPanel LastChildFill="False">
+            <Image x:Name="LogoImage"
+                   Source="pack://application:,,,/Assets/logo.png"
+                   Height="64" Stretch="Uniform"
+                   VerticalAlignment="Center"
+                   ImageFailed="LogoImage_ImageFailed"/>
+            <TextBlock x:Name="LogoFallback"
+                       Text="Azeroth Reforged"
+                       FontSize="26" FontWeight="Bold" Foreground="White"
                        VerticalAlignment="Center"
-                       ImageFailed="LogoImage_ImageFailed"/>
-                <TextBlock x:Name="LogoFallback"
-                           Text="Azeroth Reforged"
-                           FontSize="24"
-                           FontWeight="Bold"
-                           Foreground="White"
-                           VerticalAlignment="Center"
-                           Visibility="Collapsed"/>
-            </DockPanel>
+                       Visibility="Collapsed"/>
+          </DockPanel>
         </Border>
-
 
         <!-- Log in middle -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -128,17 +124,14 @@
             <ColumnDefinition Width="1.2*"/>
           </Grid.ColumnDefinitions>
 
-          <!-- Donate -->
           <Button x:Name="BtnDonate" Grid.Column="0" Content="Donate"
                   Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"
                   Click="BtnDonate_Click"/>
 
-          <!-- Options -->
           <Button x:Name="BtnConfig" Grid.Column="1" Content="Options"
                   Style="{StaticResource SecondaryButton}" Margin="8,0,8,0"
                   Click="BtnConfig_Click"/>
 
-          <!-- Play / Update / Install -->
           <Button x:Name="BtnPrimary" Grid.Column="2" Content="PLAY"
                   Style="{StaticResource PlayButtonStyle}" Margin="8,0,0,0"
                   Click="BtnPrimary_Click"/>
