@@ -58,7 +58,7 @@
 
   <!-- Background image -->
   <Window.Background>
-    <ImageBrush ImageSource="pack://application:,,,/Assets/bg_main.png"
+    <ImageBrush ImageSource="pack://application:,,,/AzerothReforged.Launcher;component/Assets/bg_main.png"
                 Stretch="UniformToFill" AlignmentX="Center" AlignmentY="Center"/>
   </Window.Background>
 
@@ -82,19 +82,12 @@
           <RowDefinition Height="Auto"/>  <!-- Buttons -->
         </Grid.RowDefinitions>
 
-        <!-- Top logo with fallback -->
+        <!-- Top logo on dark strip (no fallback) -->
         <Border Grid.Row="0" Background="#66000000" Padding="6" CornerRadius="4" Margin="0,0,0,8">
           <DockPanel LastChildFill="False">
-            <Image x:Name="LogoImage"
-                   Source="pack://application:,,,/Assets/logo.png"
+            <Image Source="pack://application:,,,/AzerothReforged.Launcher;component/Assets/logo.png"
                    Height="64" Stretch="Uniform"
-                   VerticalAlignment="Center"
-                   ImageFailed="LogoImage_ImageFailed"/>
-            <TextBlock x:Name="LogoFallback"
-                       Text="Azeroth Reforged"
-                       FontSize="26" FontWeight="Bold" Foreground="White"
-                       VerticalAlignment="Center"
-                       Visibility="Collapsed"/>
+                   VerticalAlignment="Center"/>
           </DockPanel>
         </Border>
 
