@@ -75,17 +75,22 @@
             Padding="12" Margin="0,0,12,0">
       <Grid>
         <Grid.RowDefinitions>
-          <RowDefinition Height="Auto"/>  <!-- Title -->
+          <RowDefinition Height="Auto"/>  <!-- Title (logo on dark strip) -->
           <RowDefinition Height="*"/>     <!-- Log -->
           <RowDefinition Height="Auto"/>  <!-- Status text -->
           <RowDefinition Height="Auto"/>  <!-- Progress bar -->
           <RowDefinition Height="Auto"/>  <!-- Buttons -->
         </Grid.RowDefinitions>
 
-        <!-- Title at top -->
-        <TextBlock Text="Azeroth Reforged"
-                   FontSize="26" FontWeight="Bold" Foreground="White"
-                   Margin="0,0,0,8" Grid.Row="0"/>
+        <!-- Title at top with its own darkened background -->
+        <Border Grid.Row="0" Background="#66000000" Padding="6" CornerRadius="4" Margin="0,0,0,8">
+          <DockPanel LastChildFill="False">
+            <!-- Logo image -->
+            <Image Source="pack://application:,,,/Assets/logo.png"
+                   Height="64" Stretch="Uniform"
+                   VerticalAlignment="Center" />
+          </DockPanel>
+        </Border>
 
         <!-- Log in middle -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
