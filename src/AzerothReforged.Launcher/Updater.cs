@@ -6,13 +6,27 @@ using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace AzerothReforged.Launcher
 {
-    public sealed record Manifest(string version, string minLauncherVersion, string clientBuild, string baseUrl, List<ManifestFile> files);
-    public sealed record ManifestFile(string path, long size, string sha256, string? torrent = null);
+    // Manifest models
+    public sealed record Manifest(
+        string version,
+        string minLauncherVersion,
+        string clientBuild,
+        string baseUrl,
+        List<ManifestFile> files
+    );
+
+    public sealed record ManifestFile(
+        string path,
+        long size,
+        string sha256,
+        string? torrent = null
+    );
 
     public sealed record UpdatePlan(int ToDownloadCount, List<ManifestFile> ToDownload)
     {
@@ -27,8 +41,14 @@ namespace AzerothReforged.Launcher
         public Updater(string installDir)
         {
             _installDir = installDir;
-            _http = new HttpClient(new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All });
+
+            _http = new HttpClient(new HttpClientHandler
+            {
+                AutomaticDecompression = DecompressionMethods.All
+            });
         }
+
+        // ---- public API -----------------------------------------------------
 
         public async Task<Manifest> FetchManifestAsync(Uri manifestUrl, CancellationToken ct)
         {
@@ -44,6 +64,9 @@ namespace AzerothReforged.Launcher
             var need = new List<ManifestFile>();
             foreach (var f in manifest.files)
             {
+                if (IsRealmlist(f.path))
+                    continue; // launcher owns realmlist
+
                 string full = Path.Combine(_installDir, f.path);
                 if (!File.Exists(full) || !await HashMatchesAsync(full, f.sha256, ct))
                     need.Add(f);
@@ -51,28 +74,44 @@ namespace AzerothReforged.Launcher
             return new UpdatePlan(need.Count, need);
         }
 
-        public async IAsyncEnumerable<(ManifestFile file, string status)> UpdateAsync(Manifest manifest, [EnumeratorCancellation] CancellationToken ct)
+        public async IAsyncEnumerable<(ManifestFile file, string status)> UpdateAsync(
+            Manifest manifest,
+            [EnumeratorCancellation] CancellationToken ct)
         {
             foreach (var f in manifest.files)
             {
+                if (IsRealmlist(f.path))
+                {
+                    // Skip downloading; realmlist is enforced by the launcher after update
+                    yield return (f, "skipped(realmlist)");
+                    continue;
+                }
+
                 string full = Path.Combine(_installDir, f.path);
                 Directory.CreateDirectory(Path.GetDirectoryName(full)!);
 
                 bool need = !File.Exists(full) || !await HashMatchesAsync(full, f.sha256, ct);
-                if (!need) { yield return (f, "ok"); continue; }
+                if (!need)
+                {
+                    yield return (f, "ok");
+                    continue;
+                }
 
                 var url = new Uri(new Uri(manifest.baseUrl), f.path.Replace('\\', '/'));
                 string tmp = full + ".part";
 
                 long existing = File.Exists(tmp) ? new FileInfo(tmp).Length : 0;
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
-                if (existing > 0) req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(existing, null);
+                if (existing > 0)
+                    req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(existing, null);
 
                 using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
                 resp.EnsureSuccessStatusCode();
 
                 await using (var fs = new FileStream(tmp, FileMode.Append, FileAccess.Write, FileShare.None, 1 << 16, true))
+                {
                     await resp.Content.CopyToAsync(fs, ct);
+                }
 
                 var tmpHash = await HashFileAsync(tmp, ct);
                 if (!tmpHash.Equals(f.sha256, StringComparison.OrdinalIgnoreCase))
@@ -84,8 +123,17 @@ namespace AzerothReforged.Launcher
 
                 if (File.Exists(full)) File.Delete(full);
                 File.Move(tmp, full);
+
                 yield return (f, "updated");
             }
+        }
+
+        // ---- helpers --------------------------------------------------------
+
+        private static bool IsRealmlist(string path)
+        {
+            path = path.Replace('\\', '/');
+            return Regex.IsMatch(path, @"^Data/[a-z]{2}[A-Z]{2}/realmlist\.wtf$");
         }
 
         private static async Task<bool> HashMatchesAsync(string path, string expectedSha, CancellationToken ct)
