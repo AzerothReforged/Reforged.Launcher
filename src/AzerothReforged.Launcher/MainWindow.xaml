@@ -4,6 +4,7 @@
         Title="Azeroth Reforged" Width="980" Height="620"
         WindowStartupLocation="CenterScreen">
 
+  <!-- Styles -->
   <Window.Resources>
     <SolidColorBrush x:Key="PanelBg" Color="#66000000"/>
     <SolidColorBrush x:Key="PanelBorder" Color="#5533A0E0"/>
@@ -55,75 +56,93 @@
     </Style>
   </Window.Resources>
 
-  <!-- background -->
+  <!-- Background image (pack URI) -->
   <Window.Background>
     <ImageBrush ImageSource="pack://application:,,,/Assets/bg_main.png"
                 Stretch="UniformToFill" AlignmentX="Center" AlignmentY="Center"/>
   </Window.Background>
 
+  <!-- Main layout -->
   <Grid Margin="12">
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="2*"/>
       <ColumnDefinition Width="*"/>
     </Grid.ColumnDefinitions>
 
-    <!-- LEFT: log (top), status bar (bottom above buttons), then buttons -->
+    <!-- LEFT: Title + status (top), log (middle), progress (bottom), buttons (very bottom) -->
     <Border Grid.Column="0" Background="{StaticResource PanelBg}"
             BorderBrush="{StaticResource PanelBorder}" BorderThickness="1"
             Padding="12" Margin="0,0,12,0">
       <Grid>
         <Grid.RowDefinitions>
-          <RowDefinition Height="*"/>     <!-- log -->
-          <RowDefinition Height="Auto"/>  <!-- status + progress -->
-          <RowDefinition Height="Auto"/>  <!-- buttons -->
+          <RowDefinition Height="Auto"/>  <!-- Title + status text -->
+          <RowDefinition Height="*"/>     <!-- Log -->
+          <RowDefinition Height="Auto"/>  <!-- Progress bar -->
+          <RowDefinition Height="Auto"/>  <!-- Buttons -->
         </Grid.RowDefinitions>
 
-        <!-- Log -->
-        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
-          <ListBox x:Name="LogList" Foreground="#FFEEEEEE" Background="#22000000" BorderThickness="0"/>
-        </ScrollViewer>
-
-        <!-- Status bar (moved to bottom) -->
-        <StackPanel Grid.Row="1" Margin="0,8,0,8">
-          <TextBlock Text="Azeroth Reforged" FontSize="26" FontWeight="Bold" Foreground="White"/>
-          <TextBlock x:Name="StatusText" Text="Ready" Margin="0,4,0,8" Foreground="#FFD0E8FF"/>
-          <ProgressBar x:Name="MainProgress" Height="16" Minimum="0" Maximum="100"/>
+        <!-- Title + status (stay at top) -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,8">
+          <TextBlock Text="Azeroth Reforged"
+                     FontSize="26" FontWeight="Bold" Foreground="White"/>
+          <TextBlock x:Name="StatusText"
+                     Text="Checking files..."
+                     Margin="0,4,0,0" Foreground="#FFD0E8FF"/>
         </StackPanel>
 
-        <!-- Buttons -->
-        <Grid Grid.Row="2" Margin="0,4,0,0">
+        <!-- Log (center) -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+          <ListBox x:Name="LogList"
+                   Foreground="#FFEEEEEE" Background="#22000000"
+                   BorderThickness="0"/>
+        </ScrollViewer>
+
+        <!-- Progress bar (moved to bottom, above buttons) -->
+        <ProgressBar x:Name="MainProgress"
+                     Grid.Row="2" Height="16" Margin="0,8,0,8"
+                     Minimum="0" Maximum="100"/>
+
+        <!-- Bottom buttons -->
+        <Grid Grid.Row="3">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="1.2*"/>
           </Grid.ColumnDefinitions>
 
+          <!-- Donate -->
           <Button x:Name="BtnDonate" Grid.Column="0" Content="Donate"
-                  Style="{StaticResource SecondaryButton}" Click="BtnDonate_Click"
-                  Margin="0,0,8,0"/>
+                  Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"
+                  Click="BtnDonate_Click"/>
 
+          <!-- Options (patchmenu.exe under InstallDir) -->
           <Button x:Name="BtnConfig" Grid.Column="1" Content="Options"
-                  Style="{StaticResource SecondaryButton}" Click="BtnConfig_Click"
-                  Margin="8,0,8,0"/>
+                  Style="{StaticResource SecondaryButton}" Margin="8,0,8,0"
+                  Click="BtnConfig_Click"/>
 
+          <!-- Primary: INSTALL / UPDATE / PLAY -->
           <Button x:Name="BtnPrimary" Grid.Column="2" Content="PLAY"
-                  Style="{StaticResource PlayButtonStyle}" Click="BtnPrimary_Click"
-                  Margin="8,0,0,0"/>
+                  Style="{StaticResource PlayButtonStyle}" Margin="8,0,0,0"
+                  Click="BtnPrimary_Click"/>
         </Grid>
       </Grid>
     </Border>
 
-    <!-- RIGHT: news -->
+    <!-- RIGHT: News panel -->
     <Border Grid.Column="1" Background="{StaticResource PanelBg}"
             BorderBrush="{StaticResource PanelBorder}" BorderThickness="1"
             Padding="12">
       <DockPanel>
-        <TextBlock DockPanel.Dock="Top" Text="News" FontWeight="Bold" FontSize="18" Foreground="White" Margin="0,0,0,8"/>
+        <TextBlock DockPanel.Dock="Top"
+                   Text="News" FontWeight="Bold" FontSize="18"
+                   Foreground="White" Margin="0,0,0,8"/>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel x:Name="NewsPanel"/>
         </ScrollViewer>
-        <Button DockPanel.Dock="Bottom" Content="Refresh" Width="100" HorizontalAlignment="Right" Margin="0,8,0,0"
-                Style="{StaticResource SecondaryButton}" Click="RefreshNews_Click"/>
+        <Button DockPanel.Dock="Bottom" Content="Refresh" Width="100"
+                HorizontalAlignment="Right" Margin="0,8,0,0"
+                Style="{StaticResource SecondaryButton}"
+                Click="RefreshNews_Click"/>
       </DockPanel>
     </Border>
   </Grid>
