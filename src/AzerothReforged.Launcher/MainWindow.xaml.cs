@@ -8,8 +8,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation; // for ExceptionRoutedEventArgs
 
 namespace AzerothReforged.Launcher
 {
@@ -38,13 +36,6 @@ namespace AzerothReforged.Launcher
 
             _ = InitializeStateAsync();
             _ = LoadNewsAsync();
-        }
-
-        // Fallback for logo image
-        private void LogoImage_ImageFailed(object sender, ExceptionRoutedEventArgs e)
-        {
-            LogoImage.Visibility = Visibility.Collapsed;
-            LogoFallback.Visibility = Visibility.Visible;
         }
 
         private void LoadOrCreateCfg()
