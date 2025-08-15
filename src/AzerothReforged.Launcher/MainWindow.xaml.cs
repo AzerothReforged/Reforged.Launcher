@@ -20,7 +20,7 @@ namespace AzerothReforged.Launcher
         private const string ConfigExeName          = "patchmenu.exe";  // resides under InstallDir
 
         // Launcher self-update channel
-        private const string LauncherVersion        = "1.0.0"; // bump when you ship a new launcher
+        private const string LauncherVersion        = "1.0.1"; // bump when you ship a new launcher
         private const string LauncherManifestUrl    = "https://cdn.azerothreforged.xyz/launcher.json";
         // =================================
 
