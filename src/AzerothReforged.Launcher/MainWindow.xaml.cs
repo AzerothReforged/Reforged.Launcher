@@ -20,9 +20,8 @@ namespace AzerothReforged.Launcher
         private const string ConfigExeName          = "patchmenu.exe";  // resides under InstallDir
 
         // Launcher self-update channel
-        private const string LauncherVersion     = "1.0.0"; // bump when you ship a new launcher
-        private const string LauncherManifestUrl = "https://cdn.azerothreforged.xyz/launcher.json";  // ✅ root, not /launcher/
-
+        private const string LauncherVersion        = "1.0.0"; // bump when you ship a new launcher
+        private const string LauncherManifestUrl    = "https://cdn.azerothreforged.xyz/launcher.json";
         // =================================
 
         private enum PrimaryMode { Install, Update, Play }
@@ -47,7 +46,7 @@ namespace AzerothReforged.Launcher
         {
             try
             {
-                Log("Checking launcher updates...");
+                Log($"Checking launcher updates from: {LauncherManifestUrl}");
                 var man = await LauncherSelfUpdater.FetchAsync(LauncherManifestUrl, CancellationToken.None);
                 if (man == null) { Log("No launcher manifest."); return; }
 
@@ -87,7 +86,6 @@ namespace AzerothReforged.Launcher
             }
         }
 
-        // Read launcher.cfg next to EXE. Format: InstallDir=...
         private void LoadOrCreateCfg()
         {
             string cfgPath = Path.Combine(AppContext.BaseDirectory, "launcher.cfg");
@@ -123,13 +121,13 @@ namespace AzerothReforged.Launcher
                 bool hasWow = File.Exists(Path.Combine(_installDir, "Wow.exe"));
 
                 var manifest = await _updater.FetchManifestAsync(new Uri(ManifestUrl), CancellationToken.None);
-                var plan = await _updater.ComputeUpdatePlanAsync(manifest, CancellationToken.None);
+                var plan = await _updater.ComputeUpdatePlanAsync(manifest, CancellationToken.None, installMode: !hasWow);
 
                 if (!hasWow) SetMode(PrimaryMode.Install);
                 else SetMode(plan.NeedsAny ? PrimaryMode.Update : PrimaryMode.Play);
 
                 StatusText.Text = plan.NeedsAny
-                    ? $"Update available ({plan.ToDownloadCount}/{manifest.files.Count} files)"
+                    ? $"Update available ({plan.ToDownloadCount}/{manifest.files.Count} items)"
                     : "Up to date.";
             }
             catch (Exception ex)
@@ -173,25 +171,28 @@ namespace AzerothReforged.Launcher
             Log("Fetching manifest...");
             try
             {
+                bool installMode = _mode == PrimaryMode.Install;
                 var manifest = await _updater.FetchManifestAsync(new Uri(ManifestUrl), CancellationToken.None);
 
                 int total = manifest.files.Count;
                 int done  = 0;
                 MainProgress.Value = 0;
 
-                await foreach (var (file, status) in _updater.UpdateAsync(manifest, CancellationToken.None))
+                await foreach (var (file, status) in _updater.UpdateAsync(manifest, installMode, CancellationToken.None))
                 {
                     done++;
                     var pct = (int)Math.Round((double)done / Math.Max(1, total) * 100);
                     MainProgress.Value = pct;
-                    Log($"{status.ToUpper(),-14} {file.path} ({file.size} bytes)");
+                    Log($"{status.ToUpper(),-18} {file.path} ({file.size} bytes)");
                 }
 
                 EnsureRealmlist(_installDir, RealmlistHost);
                 Log("Realmlist ensured.");
 
-                var plan = await _updater.ComputeUpdatePlanAsync(manifest, CancellationToken.None);
-                SetMode(plan.NeedsAny ? PrimaryMode.Update : PrimaryMode.Play);
+                // Re-evaluate: if now has Wow.exe and nothing pending, flip to PLAY
+                bool hasWow = File.Exists(Path.Combine(_installDir, "Wow.exe"));
+                var plan = await _updater.ComputeUpdatePlanAsync(manifest, CancellationToken.None, installMode: !hasWow);
+                SetMode(!hasWow ? PrimaryMode.Install : (plan.NeedsAny ? PrimaryMode.Update : PrimaryMode.Play));
 
                 StatusText.Text = plan.NeedsAny ? "Update pending." : "Update complete.";
             }
