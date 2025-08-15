@@ -14,30 +14,79 @@ namespace AzerothReforged.Launcher
     public partial class MainWindow : Window
     {
         // ===== COMPILED-IN CONFIG ===== 
-        private const string ManifestUrl   = "https://cdn.azerothreforged.xyz/latest.json";
-        private const string NewsUrl       = "https://www.azerothreforged.xyz/feed/";
-        private const string RealmlistHost = "login.azerothreforged.xyz";
-        private const string ConfigExeName = "patchmenu.exe"; // resides under InstallDir
+        private const string ManifestUrl            = "https://cdn.azerothreforged.xyz/latest.json";
+        private const string NewsUrl                = "https://www.azerothreforged.xyz/feed/";
+        private const string RealmlistHost          = "login.azerothreforged.xyz";
+        private const string ConfigExeName          = "patchmenu.exe";  // resides under InstallDir
+
+        // Launcher self-update channel
+        private const string LauncherVersion        = "1.0.0"; // bump when you ship a new launcher
+        private const string LauncherManifestUrl    = "https://cdn.azerothreforged.xyz/launcher/launcher.json";
         // =================================
 
         private enum PrimaryMode { Install, Update, Play }
         private PrimaryMode _mode = PrimaryMode.Install;
 
-        private string _installDir = @"C:\Games\Azeroth Reforged"; // default (overridden by launcher.cfg)
+        private string _installDir = @"C:\Games\Azeroth Reforged"; // overridden by launcher.cfg
         private readonly Updater _updater;
 
         public MainWindow()
         {
             InitializeComponent();
-            LoadOrCreateCfg(); // sets _installDir
+            LoadOrCreateCfg();
             _updater = new Updater(_installDir);
-
             Directory.CreateDirectory(_installDir);
 
-            _ = InitializeStateAsync();
+            _ = SelfUpdateCheckAsync();   // launcher updates (zip or exe)
+            _ = InitializeStateAsync();   // game files
             _ = LoadNewsAsync();
         }
 
+        private async Task SelfUpdateCheckAsync()
+        {
+            try
+            {
+                Log("Checking launcher updates...");
+                var man = await LauncherSelfUpdater.FetchAsync(LauncherManifestUrl, CancellationToken.None);
+                if (man == null) { Log("No launcher manifest."); return; }
+
+                if (LauncherSelfUpdater.CompareVersion(man.version, LauncherVersion) > 0)
+                {
+                    Log($"Launcher update found: {man.version}");
+                    var path = await LauncherSelfUpdater.DownloadAsync(man.url, CancellationToken.None);
+                    if (!await LauncherSelfUpdater.VerifySha256Async(path, man.sha256, CancellationToken.None))
+                    {
+                        Log("Launcher update hash mismatch; aborting.");
+                        try { File.Delete(path); } catch { }
+                        return;
+                    }
+
+                    string currentExe = System.Diagnostics.Process.GetCurrentProcess().MainModule!.FileName!;
+                    string launcherDir = AppContext.BaseDirectory.TrimEnd('\\'); // {app}\Launcher\
+
+                    if (man.url.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Log("Updating launcher (package)...");
+                        LauncherSelfUpdater.DeployZipAndRestart(path, launcherDir, currentExe);
+                    }
+                    else
+                    {
+                        Log("Updating launcher (exe)...");
+                        LauncherSelfUpdater.SwapExeAndRestart(currentExe, path);
+                    }
+                }
+                else
+                {
+                    Log("Launcher is up to date.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("Launcher update check failed: " + ex.Message);
+            }
+        }
+
+        // Read launcher.cfg next to EXE. Format: InstallDir=...
         private void LoadOrCreateCfg()
         {
             string cfgPath = Path.Combine(AppContext.BaseDirectory, "launcher.cfg");
@@ -57,7 +106,7 @@ namespace AzerothReforged.Launcher
                         }
                     }
                 }
-                catch { /* ignore and keep default */ }
+                catch { /* ignore */ }
             }
             else
             {
