@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
@@ -38,6 +39,10 @@ namespace AzerothReforged.Launcher
         private readonly string _installDir;
         private readonly HttpClient _http;
 
+        // We store extraction stamps here so zip packages aren’t re-applied every run
+        // when their contents are already in place.
+        private string StampDir => Path.Combine(_installDir, ".arlauncher", "stamps");
+
         public Updater(string installDir)
         {
             _installDir = installDir;
@@ -46,6 +51,9 @@ namespace AzerothReforged.Launcher
             {
                 AutomaticDecompression = DecompressionMethods.All
             });
+
+            Directory.CreateDirectory(_installDir);
+            Directory.CreateDirectory(StampDir);
         }
 
         // ---- public API -----------------------------------------------------
@@ -64,8 +72,17 @@ namespace AzerothReforged.Launcher
             var need = new List<ManifestFile>();
             foreach (var f in manifest.files)
             {
-                if (IsRealmlist(f.path))
-                    continue; // launcher owns realmlist
+                if (IsIgnored(f.path))
+                    continue;
+
+                if (IsZip(f.path))
+                {
+                    // For zip packages, we use a stamp keyed by the archive hash.
+                    if (!HasStamp(f.sha256))
+                        need.Add(f);
+
+                    continue;
+                }
 
                 string full = Path.Combine(_installDir, f.path);
                 if (!File.Exists(full) || !await HashMatchesAsync(full, f.sha256, ct))
@@ -80,37 +97,98 @@ namespace AzerothReforged.Launcher
         {
             foreach (var f in manifest.files)
             {
-                if (IsRealmlist(f.path))
+                if (IsIgnored(f.path))
                 {
-                    // Skip downloading; realmlist is enforced by the launcher after update
-                    yield return (f, "skipped(realmlist)");
+                    yield return (f, "skipped(ignored)");
                     continue;
                 }
 
-                string full = Path.Combine(_installDir, f.path);
-                Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+                if (IsZip(f.path))
+                {
+                    // Download archive to temp, verify, extract, stamp.
+                    var url = BuildFileUrl(manifest.baseUrl, f.path);
+                    string tmpZip = GetTempPathFor(f.path);
+                    string tmpPart = tmpZip + ".part";
 
-                bool need = !File.Exists(full) || !await HashMatchesAsync(full, f.sha256, ct);
+                    // Simple fresh download (could do ranges as needed)
+                    if (File.Exists(tmpPart)) File.Delete(tmpPart);
+                    using (var resp = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct))
+                    {
+                        resp.EnsureSuccessStatusCode();
+                        await using var fs = new FileStream(tmpPart, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, true);
+                        await resp.Content.CopyToAsync(fs, ct);
+                    }
+
+                    // Validate hash against manifest (the hash is for the ZIP file itself)
+                    var zipHash = await HashFileAsync(tmpPart, ct);
+                    if (!zipHash.Equals(f.sha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.Delete(tmpPart);
+                        yield return (f, "hash_mismatch(zip)");
+                        continue;
+                    }
+
+                    // Move to final temp .zip
+                    if (File.Exists(tmpZip)) File.Delete(tmpZip);
+                    File.Move(tmpPart, tmpZip);
+
+                    // Extract into install root (preserve internal paths), overwrite files
+                    try
+                    {
+                        ZipFile.ExtractToDirectory(tmpZip, _installDir, overwriteFiles: true);
+                    }
+                    catch
+                    {
+                        // Some older frameworks don’t have overwriteFiles parameter; fallback:
+                        // Manual extract per entry with overwrite
+                        using var za = ZipFile.OpenRead(tmpZip);
+                        foreach (var entry in za.Entries)
+                        {
+                            string destPath = Path.Combine(_installDir, entry.FullName);
+                            Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+                            if (string.IsNullOrEmpty(entry.Name))
+                                continue; // folder entry
+
+                            // Overwrite
+                            entry.ExtractToFile(destPath, overwrite: true);
+                        }
+                    }
+                    finally
+                    {
+                        try { File.Delete(tmpZip); } catch { /* ignore */ }
+                    }
+
+                    // Write stamp so this exact archive hash isn’t re-applied next runs
+                    WriteStamp(f.sha256);
+
+                    yield return (f, "extracted");
+                    continue;
+                }
+
+                // Regular (non-zip) file handling with resume & hash validation
+                string fullPath = Path.Combine(_installDir, f.path);
+                Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+
+                bool need = !File.Exists(fullPath) || !await HashMatchesAsync(fullPath, f.sha256, ct);
                 if (!need)
                 {
                     yield return (f, "ok");
                     continue;
                 }
 
-                var url = new Uri(new Uri(manifest.baseUrl), f.path.Replace('\\', '/'));
-                string tmp = full + ".part";
+                var fileUrl = BuildFileUrl(manifest.baseUrl, f.path);
+                string tmp = fullPath + ".part";
 
                 long existing = File.Exists(tmp) ? new FileInfo(tmp).Length : 0;
-                using var req = new HttpRequestMessage(HttpMethod.Get, url);
-                if (existing > 0)
-                    req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(existing, null);
-
-                using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
-                resp.EnsureSuccessStatusCode();
-
-                await using (var fs = new FileStream(tmp, FileMode.Append, FileAccess.Write, FileShare.None, 1 << 16, true))
+                using (var req = new HttpRequestMessage(HttpMethod.Get, fileUrl))
                 {
-                    await resp.Content.CopyToAsync(fs, ct);
+                    if (existing > 0) req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(existing, null);
+
+                    using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+                    resp.EnsureSuccessStatusCode();
+
+                    await using (var fs = new FileStream(tmp, FileMode.Append, FileAccess.Write, FileShare.None, 1 << 16, true))
+                        await resp.Content.CopyToAsync(fs, ct);
                 }
 
                 var tmpHash = await HashFileAsync(tmp, ct);
@@ -121,8 +199,8 @@ namespace AzerothReforged.Launcher
                     continue;
                 }
 
-                if (File.Exists(full)) File.Delete(full);
-                File.Move(tmp, full);
+                if (File.Exists(fullPath)) File.Delete(fullPath);
+                File.Move(tmp, fullPath);
 
                 yield return (f, "updated");
             }
@@ -130,10 +208,51 @@ namespace AzerothReforged.Launcher
 
         // ---- helpers --------------------------------------------------------
 
-        private static bool IsRealmlist(string path)
+        private static bool IsZip(string path)
+            => path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsIgnored(string path)
         {
             path = path.Replace('\\', '/');
-            return Regex.IsMatch(path, @"^Data/[a-z]{2}[A-Z]{2}/realmlist\.wtf$");
+            // realmlist is managed locally by the launcher to avoid hash churn
+            if (Regex.IsMatch(path, @"^Data/[a-z]{2}[A-Z]{2}/realmlist\.wtf$"))
+                return true;
+
+            // Never touch launcher files via the GAME updater
+            if (path.StartsWith("Launcher/", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return false;
+        }
+
+        private Uri BuildFileUrl(string baseUrl, string relPath)
+        {
+            var baseUri = new Uri(FixBase(baseUrl));
+            return new Uri(baseUri, relPath.Replace('\\', '/'));
+            static string FixBase(string b) => b.EndsWith("/") ? b : (b + "/");
+        }
+
+        private string GetTempPathFor(string rel)
+        {
+            string safe = rel.Replace('\\', '_').Replace('/', '_');
+            return Path.Combine(Path.GetTempPath(), "AR_" + safe);
+        }
+
+        private bool HasStamp(string sha256)
+        {
+            string path = Path.Combine(StampDir, sha256.ToUpper() + ".stamp");
+            return File.Exists(path);
+        }
+
+        private void WriteStamp(string sha256)
+        {
+            try
+            {
+                Directory.CreateDirectory(StampDir);
+                string path = Path.Combine(StampDir, sha256.ToUpper() + ".stamp");
+                File.WriteAllText(path, DateTime.UtcNow.ToString("o"));
+            }
+            catch { /* ignore */ }
         }
 
         private static async Task<bool> HashMatchesAsync(string path, string expectedSha, CancellationToken ct)
