@@ -10,6 +10,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace AzerothReforged.Launcher
 {
@@ -26,7 +27,7 @@ namespace AzerothReforged.Launcher
         string path,
         long size,
         string sha256,
-        string? torrent = null
+        string? torrent = null  // optional magnet or .torrent URL (used for ZIPs)
     );
 
     public sealed record UpdatePlan(int ToDownloadCount, List<ManifestFile> ToDownload)
@@ -39,9 +40,14 @@ namespace AzerothReforged.Launcher
         private readonly string _installDir;
         private readonly HttpClient _http;
 
-        // We store extraction stamps here so zip packages aren’t re-applied every run
-        // when their contents are already in place.
-        private string StampDir => Path.Combine(_installDir, ".arlauncher", "stamps");
+        // Persistence for applied ZIP packages (so we don't re-extract if user deletes temp)
+        private string MetaDir        => Path.Combine(_installDir, ".arlauncher");
+        private string AppliedLogPath => Path.Combine(MetaDir, "applied.log");
+
+        // Legacy stamp compatibility (older versions created per-sha stamp files)
+        private string StampDir       => Path.Combine(MetaDir, "stamps");
+
+        private readonly HashSet<string> _appliedZips = new(StringComparer.OrdinalIgnoreCase);
 
         public Updater(string installDir)
         {
@@ -53,7 +59,11 @@ namespace AzerothReforged.Launcher
             });
 
             Directory.CreateDirectory(_installDir);
+            Directory.CreateDirectory(MetaDir);
             Directory.CreateDirectory(StampDir);
+
+            LoadAppliedLog();
+            MigrateLegacyStamps();
         }
 
         // ---- public API -----------------------------------------------------
@@ -67,7 +77,11 @@ namespace AzerothReforged.Launcher
             return m ?? throw new InvalidOperationException("Invalid manifest JSON");
         }
 
-        public async Task<UpdatePlan> ComputeUpdatePlanAsync(Manifest manifest, CancellationToken ct)
+        /// <summary>
+        /// installMode=true => ZIP packages are considered and extracted.
+        /// installMode=false => ZIP packages are ignored (only loose files update).
+        /// </summary>
+        public async Task<UpdatePlan> ComputeUpdatePlanAsync(Manifest manifest, CancellationToken ct, bool installMode = false)
         {
             var need = new List<ManifestFile>();
             foreach (var f in manifest.files)
@@ -77,8 +91,11 @@ namespace AzerothReforged.Launcher
 
                 if (IsZip(f.path))
                 {
-                    // For zip packages, we use a stamp keyed by the archive hash.
-                    if (!HasStamp(f.sha256))
+                    if (!installMode)
+                        continue; // only install-time ZIPs
+
+                    // ZIP: if we’ve applied this exact archive SHA before, skip
+                    if (!HasApplied(f.sha256))
                         need.Add(f);
 
                     continue;
@@ -91,8 +108,12 @@ namespace AzerothReforged.Launcher
             return new UpdatePlan(need.Count, need);
         }
 
+        /// <summary>
+        /// installMode=true => ZIPs will download/extract; otherwise only loose files are processed.
+        /// </summary>
         public async IAsyncEnumerable<(ManifestFile file, string status)> UpdateAsync(
             Manifest manifest,
+            bool installMode,
             [EnumeratorCancellation] CancellationToken ct)
         {
             foreach (var f in manifest.files)
@@ -105,42 +126,79 @@ namespace AzerothReforged.Launcher
 
                 if (IsZip(f.path))
                 {
-                    // Download archive to temp, verify, extract, stamp.
+                    if (!installMode)
+                    {
+                        yield return (f, "skipped(zip-noninstall)");
+                        continue;
+                    }
+
+                    // Already applied? skip
+                    if (HasApplied(f.sha256))
+                    {
+                        yield return (f, "ok(zip-applied)");
+                        continue;
+                    }
+
                     var url = BuildFileUrl(manifest.baseUrl, f.path);
                     string tmpZip = GetTempPathFor(f.path);
                     string tmpPart = tmpZip + ".part";
 
-                    // Simple fresh download (could do ranges as needed)
-                    if (File.Exists(tmpPart)) File.Delete(tmpPart);
-                    using (var resp = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct))
+                    // Prefer torrent if provided and aria2c is available; else HTTP
+                    bool usedTorrent = false;
+                    if (!string.IsNullOrWhiteSpace(f.torrent) && TryGetAria2(out string aria))
                     {
-                        resp.EnsureSuccessStatusCode();
-                        await using var fs = new FileStream(tmpPart, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, true);
-                        await resp.Content.CopyToAsync(fs, ct);
+                        // Single-file torrent expected; direct output to tmpZip
+                        if (File.Exists(tmpZip)) File.Delete(tmpZip);
+                        usedTorrent = await DownloadViaAria2Async(aria, f.torrent!, tmpZip, ct);
+                        if (!usedTorrent)
+                        {
+                            // fallback to HTTP
+                            if (File.Exists(tmpZip)) File.Delete(tmpZip);
+                        }
                     }
 
-                    // Validate hash against manifest (the hash is for the ZIP file itself)
-                    var zipHash = await HashFileAsync(tmpPart, ct);
-                    if (!zipHash.Equals(f.sha256, StringComparison.OrdinalIgnoreCase))
+                    if (!usedTorrent)
                     {
-                        File.Delete(tmpPart);
-                        yield return (f, "hash_mismatch(zip)");
-                        continue;
-                    }
+                        // Fresh HTTP download of the zip
+                        if (File.Exists(tmpPart)) File.Delete(tmpPart);
+                        using (var resp = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct))
+                        {
+                            resp.EnsureSuccessStatusCode();
+                            await using var fs = new FileStream(tmpPart, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, true);
+                            await resp.Content.CopyToAsync(fs, ct);
+                        }
 
-                    // Move to final temp .zip
-                    if (File.Exists(tmpZip)) File.Delete(tmpZip);
-                    File.Move(tmpPart, tmpZip);
+                        // Validate the zip file hash (manifest sha is for the archive itself)
+                        var zipHash = await HashFileAsync(tmpPart, ct);
+                        if (!zipHash.Equals(f.sha256, StringComparison.OrdinalIgnoreCase))
+                        {
+                            File.Delete(tmpPart);
+                            yield return (f, "hash_mismatch(zip)");
+                            continue;
+                        }
+
+                        // Move to final temp .zip
+                        if (File.Exists(tmpZip)) File.Delete(tmpZip);
+                        File.Move(tmpPart, tmpZip);
+                    }
+                    else
+                    {
+                        // Verify torrent-downloaded file
+                        var zipHash = await HashFileAsync(tmpZip, ct);
+                        if (!zipHash.Equals(f.sha256, StringComparison.OrdinalIgnoreCase))
+                        {
+                            try { File.Delete(tmpZip); } catch { }
+                            yield return (f, "hash_mismatch(zip)");
+                            continue;
+                        }
+                    }
 
                     // Extract into install root (preserve internal paths), overwrite files
                     try
                     {
+#if NET6_0_OR_GREATER
                         ZipFile.ExtractToDirectory(tmpZip, _installDir, overwriteFiles: true);
-                    }
-                    catch
-                    {
-                        // Some older frameworks don’t have overwriteFiles parameter; fallback:
-                        // Manual extract per entry with overwrite
+#else
                         using var za = ZipFile.OpenRead(tmpZip);
                         foreach (var entry in za.Entries)
                         {
@@ -148,18 +206,18 @@ namespace AzerothReforged.Launcher
                             Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
                             if (string.IsNullOrEmpty(entry.Name))
                                 continue; // folder entry
-
-                            // Overwrite
                             entry.ExtractToFile(destPath, overwrite: true);
                         }
+#endif
                     }
                     finally
                     {
                         try { File.Delete(tmpZip); } catch { /* ignore */ }
                     }
 
-                    // Write stamp so this exact archive hash isn’t re-applied next runs
-                    WriteStamp(f.sha256);
+                    // Record application of this archive SHA so we never re-download due to missing temp files
+                    RecordApplied(f.sha256);
+                    WriteLegacyStamp(f.sha256); // optional back-compat
 
                     yield return (f, "extracted");
                     continue;
@@ -238,23 +296,6 @@ namespace AzerothReforged.Launcher
             return Path.Combine(Path.GetTempPath(), "AR_" + safe);
         }
 
-        private bool HasStamp(string sha256)
-        {
-            string path = Path.Combine(StampDir, sha256.ToUpper() + ".stamp");
-            return File.Exists(path);
-        }
-
-        private void WriteStamp(string sha256)
-        {
-            try
-            {
-                Directory.CreateDirectory(StampDir);
-                string path = Path.Combine(StampDir, sha256.ToUpper() + ".stamp");
-                File.WriteAllText(path, DateTime.UtcNow.ToString("o"));
-            }
-            catch { /* ignore */ }
-        }
-
         private static async Task<bool> HashMatchesAsync(string path, string expectedSha, CancellationToken ct)
         {
             var h = await HashFileAsync(path, ct);
@@ -267,6 +308,108 @@ namespace AzerothReforged.Launcher
             using var sha = SHA256.Create();
             var hash = await sha.ComputeHashAsync(fs, ct);
             return Convert.ToHexString(hash);
+        }
+
+        // ---------- applied.log management ----------
+
+        private void LoadAppliedLog()
+        {
+            _appliedZips.Clear();
+            try
+            {
+                if (File.Exists(AppliedLogPath))
+                {
+                    foreach (var line in File.ReadAllLines(AppliedLogPath))
+                    {
+                        var s = line.Trim().ToUpperInvariant();
+                        if (s.Length >= 40) _appliedZips.Add(s);
+                    }
+                }
+            }
+            catch { /* ignore */ }
+        }
+
+        private void RecordApplied(string sha256)
+        {
+            try
+            {
+                Directory.CreateDirectory(MetaDir);
+                var s = sha256.ToUpperInvariant();
+                if (_appliedZips.Add(s))
+                {
+                    File.AppendAllText(AppliedLogPath, s + Environment.NewLine);
+                }
+            }
+            catch { /* ignore */ }
+        }
+
+        private bool HasApplied(string sha256)
+        {
+            var s = sha256.ToUpperInvariant();
+            if (_appliedZips.Contains(s))
+                return true;
+
+            // Back-compat: consider legacy stamp files as applied
+            if (HasLegacyStamp(s))
+            {
+                RecordApplied(s);
+                return true;
+            }
+            return false;
+        }
+
+        // ---------- legacy stamp compat ----------
+
+        private bool HasLegacyStamp(string sha256Upper)
+        {
+            string path = Path.Combine(StampDir, sha256Upper + ".stamp");
+            return File.Exists(path);
+        }
+
+        private void WriteLegacyStamp(string sha256)
+        {
+            try
+            {
+                Directory.CreateDirectory(StampDir);
+                string path = Path.Combine(StampDir, sha256.ToUpperInvariant() + ".stamp");
+                File.WriteAllText(path, DateTime.UtcNow.ToString("o"));
+            }
+            catch { /* ignore */ }
+        }
+
+        // ---------- torrent via aria2c (optional) ----------
+
+        private static bool TryGetAria2(out string aria2Path)
+        {
+            // Expect aria2c.exe to be placed next to the launcher (...\Launcher\aria2c.exe)
+            string baseDir = AppContext.BaseDirectory;
+            string p = Path.Combine(baseDir, "aria2c.exe");
+            aria2Path = p;
+            return File.Exists(p);
+        }
+
+        private static async Task<bool> DownloadViaAria2Async(string aria2, string torrentOrMagnet, string outPath, CancellationToken ct)
+        {
+            // aria2c supports --out for single-file torrents/magnets
+            var psi = new ProcessStartInfo
+            {
+                FileName = aria2,
+                Arguments = $"--check-certificate=false --allow-overwrite=true --dir=\"{Path.GetDirectoryName(outPath)}\" --out=\"{Path.GetFileName(outPath)}\" \"{torrentOrMagnet}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc == null) return false;
+
+            // crude wait with cancellation
+            while (!proc.HasExited)
+            {
+                await Task.Delay(200, ct);
+            }
+            return proc.ExitCode == 0 && File.Exists(outPath);
         }
     }
 }
