@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net;
@@ -10,7 +11,6 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Diagnostics;
 
 namespace AzerothReforged.Launcher
 {
@@ -40,7 +40,7 @@ namespace AzerothReforged.Launcher
         private readonly string _installDir;
         private readonly HttpClient _http;
 
-        // Persistence for applied ZIP packages (so we don't re-extract if user deletes temp)
+        // Persistence for applied ZIP packages
         private string MetaDir        => Path.Combine(_installDir, ".arlauncher");
         private string AppliedLogPath => Path.Combine(MetaDir, "applied.log");
 
@@ -63,7 +63,7 @@ namespace AzerothReforged.Launcher
             Directory.CreateDirectory(StampDir);
 
             LoadAppliedLog();
-            MigrateLegacyStamps();
+            MigrateLegacyStamps();   // <- make sure this method exists (defined below)
         }
 
         // ---- public API -----------------------------------------------------
@@ -94,7 +94,6 @@ namespace AzerothReforged.Launcher
                     if (!installMode)
                         continue; // only install-time ZIPs
 
-                    // ZIP: if we’ve applied this exact archive SHA before, skip
                     if (!HasApplied(f.sha256))
                         need.Add(f);
 
@@ -132,7 +131,6 @@ namespace AzerothReforged.Launcher
                         continue;
                     }
 
-                    // Already applied? skip
                     if (HasApplied(f.sha256))
                     {
                         yield return (f, "ok(zip-applied)");
@@ -140,26 +138,20 @@ namespace AzerothReforged.Launcher
                     }
 
                     var url = BuildFileUrl(manifest.baseUrl, f.path);
-                    string tmpZip = GetTempPathFor(f.path);
+                    string tmpZip  = GetTempPathFor(f.path);
                     string tmpPart = tmpZip + ".part";
 
                     // Prefer torrent if provided and aria2c is available; else HTTP
                     bool usedTorrent = false;
                     if (!string.IsNullOrWhiteSpace(f.torrent) && TryGetAria2(out string aria))
                     {
-                        // Single-file torrent expected; direct output to tmpZip
                         if (File.Exists(tmpZip)) File.Delete(tmpZip);
                         usedTorrent = await DownloadViaAria2Async(aria, f.torrent!, tmpZip, ct);
-                        if (!usedTorrent)
-                        {
-                            // fallback to HTTP
-                            if (File.Exists(tmpZip)) File.Delete(tmpZip);
-                        }
+                        if (!usedTorrent) { if (File.Exists(tmpZip)) File.Delete(tmpZip); }
                     }
 
                     if (!usedTorrent)
                     {
-                        // Fresh HTTP download of the zip
                         if (File.Exists(tmpPart)) File.Delete(tmpPart);
                         using (var resp = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct))
                         {
@@ -168,7 +160,6 @@ namespace AzerothReforged.Launcher
                             await resp.Content.CopyToAsync(fs, ct);
                         }
 
-                        // Validate the zip file hash (manifest sha is for the archive itself)
                         var zipHash = await HashFileAsync(tmpPart, ct);
                         if (!zipHash.Equals(f.sha256, StringComparison.OrdinalIgnoreCase))
                         {
@@ -177,13 +168,11 @@ namespace AzerothReforged.Launcher
                             continue;
                         }
 
-                        // Move to final temp .zip
                         if (File.Exists(tmpZip)) File.Delete(tmpZip);
                         File.Move(tmpPart, tmpZip);
                     }
                     else
                     {
-                        // Verify torrent-downloaded file
                         var zipHash = await HashFileAsync(tmpZip, ct);
                         if (!zipHash.Equals(f.sha256, StringComparison.OrdinalIgnoreCase))
                         {
@@ -215,7 +204,6 @@ namespace AzerothReforged.Launcher
                         try { File.Delete(tmpZip); } catch { /* ignore */ }
                     }
 
-                    // Record application of this archive SHA so we never re-download due to missing temp files
                     RecordApplied(f.sha256);
                     WriteLegacyStamp(f.sha256); // optional back-compat
 
@@ -272,14 +260,10 @@ namespace AzerothReforged.Launcher
         private static bool IsIgnored(string path)
         {
             path = path.Replace('\\', '/');
-            // realmlist is managed locally by the launcher to avoid hash churn
             if (Regex.IsMatch(path, @"^Data/[a-z]{2}[A-Z]{2}/realmlist\.wtf$"))
                 return true;
-
-            // Never touch launcher files via the GAME updater
             if (path.StartsWith("Launcher/", StringComparison.OrdinalIgnoreCase))
                 return true;
-
             return false;
         }
 
@@ -336,9 +320,7 @@ namespace AzerothReforged.Launcher
                 Directory.CreateDirectory(MetaDir);
                 var s = sha256.ToUpperInvariant();
                 if (_appliedZips.Add(s))
-                {
                     File.AppendAllText(AppliedLogPath, s + Environment.NewLine);
-                }
             }
             catch { /* ignore */ }
         }
@@ -349,7 +331,6 @@ namespace AzerothReforged.Launcher
             if (_appliedZips.Contains(s))
                 return true;
 
-            // Back-compat: consider legacy stamp files as applied
             if (HasLegacyStamp(s))
             {
                 RecordApplied(s);
@@ -377,11 +358,29 @@ namespace AzerothReforged.Launcher
             catch { /* ignore */ }
         }
 
+        private void MigrateLegacyStamps()
+        {
+            try
+            {
+                if (!Directory.Exists(StampDir)) return;
+                foreach (var file in Directory.GetFiles(StampDir, "*.stamp"))
+                {
+                    var name = Path.GetFileNameWithoutExtension(file);
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        var s = name.Trim().ToUpperInvariant();
+                        if (s.Length >= 40 && !_appliedZips.Contains(s))
+                            RecordApplied(s);
+                    }
+                }
+            }
+            catch { /* ignore */ }
+        }
+
         // ---------- torrent via aria2c (optional) ----------
 
         private static bool TryGetAria2(out string aria2Path)
         {
-            // Expect aria2c.exe to be placed next to the launcher (...\Launcher\aria2c.exe)
             string baseDir = AppContext.BaseDirectory;
             string p = Path.Combine(baseDir, "aria2c.exe");
             aria2Path = p;
@@ -390,7 +389,6 @@ namespace AzerothReforged.Launcher
 
         private static async Task<bool> DownloadViaAria2Async(string aria2, string torrentOrMagnet, string outPath, CancellationToken ct)
         {
-            // aria2c supports --out for single-file torrents/magnets
             var psi = new ProcessStartInfo
             {
                 FileName = aria2,
@@ -404,11 +402,9 @@ namespace AzerothReforged.Launcher
             using var proc = Process.Start(psi);
             if (proc == null) return false;
 
-            // crude wait with cancellation
             while (!proc.HasExited)
-            {
                 await Task.Delay(200, ct);
-            }
+
             return proc.ExitCode == 0 && File.Exists(outPath);
         }
     }
